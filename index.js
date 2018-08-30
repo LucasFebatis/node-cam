@@ -2,6 +2,7 @@ const asciimo = require('asciimo').Figlet;
 const CameraBusiness = require('./business/camera.business'); // CameraBusiness for webcam (should have same interface)
 //const CameraBusiness = require('./business/raspistill.business'); // RaspistillBusiness for raspiberry cam (should have same interface)
 const RekognitionBusiness = require('./business/rekognition.business');
+const SlackApi = require('./slack_api/index');
 
 //Gathering parameters
 let operation = null;
@@ -10,20 +11,20 @@ let pictureName = "track.jpg"; // Name of the default saved picture (for sending
 let help = false;
 
 process.argv.forEach(function (val, index, array) {
-  if(val === '--operation')
-	operation = process.argv[index + 1];
-	
-  if(val === '--person')
-	personName = process.argv[index + 1];
-	
-  if(val === '--picture')
-	pictureName = process.argv[index + 1];
-	
-  if(val === '--help')
-	help = true;
+  if (val === '--operation')
+    operation = process.argv[index + 1];
+
+  if (val === '--person')
+    personName = process.argv[index + 1];
+
+  if (val === '--picture')
+    pictureName = process.argv[index + 1];
+
+  if (val === '--help')
+    help = true;
 });
 
-if(help) {
+if (help) {
   let spacer = '-----------------------//-----------------------';
   console.log('Params:');
   console.log(spacer);
@@ -43,13 +44,13 @@ if(help) {
   return;
 }
 
-if(!operation || (operation != "match" && operation != "save")) {
+if (!operation || (operation != "match" && operation != "save")) {
   console.log('Param "--operation" is required or is invalid!');
   console.log('For more info run --help');
   return;
 }
 
-if(!personName && operation == "save") {
+if (!personName && operation == "save") {
   console.log('Param "--person" is required when op == save!');
   console.log('For more info run --help');
   return;
@@ -57,45 +58,53 @@ if(!personName && operation == "save") {
 
 
 // Starting program
-const run = async () => {  
+const run = async () => {
   let captureBusiness = new CameraBusiness();
   let rekognitionBusiness = new RekognitionBusiness();
-  
-  // Capturing the image
-  if(pictureName == "track.jpg") {
-    pictureName = new Date().getTime() + '.jpg';
-    console.log('Snapping picture...');
-    let cameraSnap = await captureBusiness.snap(pictureName);
-    console.log('Picture saved!');
-  }
+  let slackApi = new SlackApi();
 
-  try{
-	let response = 'Invalid operation';
-	
-	if(operation == 'save') {
-	  // Saving face to rekognition
-	  console.log('Saving face to rekognition...');
-      response = await rekognitionBusiness.IndexFace(pictureName, personName);
+  // Capturing the image
+  for (; ;) {
+    pictureName = "track.jpg";
+    if (pictureName == "track.jpg") {
+      pictureName = new Date().getTime() + '.jpg';
+      console.log('Snapping picture...');
+      let cameraSnap = await captureBusiness.snap(pictureName);
+      console.log('Picture saved!');
     }
-    
-    if(operation == 'match') {
-	  // Matching face on rekognition
-	  console.log('Matching face on rekognition...');
-      response = await rekognitionBusiness.MatchFace(pictureName);
-      
-      if(response.FaceMatches[0]) {
-        asciimo.write("Authorized", "Banner", (art) => {console.log(art)});
-        asciimo.write(response.FaceMatches[0].Face.ExternalImageId, "Banner", (art) => {console.log(art)});
+
+    try {
+      let response = 'Invalid operation';
+
+      if (operation == 'save') {
+        // Saving face to rekognition
+        console.log('Saving face to rekognition...');
+        response = await rekognitionBusiness.IndexFace(pictureName, personName);
+        console.log(response);
+        return;
       }
-      else
-		asciimo.write("Denied", "Banner", (art) => {console.log(art)});
-      return;
+
+      if (operation == 'match') {
+        // Matching face on rekognition
+
+        console.log('Matching face on rekognition...');
+        response = await rekognitionBusiness.MatchFace(pictureName);
+
+        if (response.FaceMatches[0]) {
+          asciimo.write("Authorized", "Banner", (art) => { console.log(art) });
+          asciimo.write(response.FaceMatches[0].Face.ExternalImageId, "Banner", (art) => { console.log(art) });
+        }
+        else
+          asciimo.write("Denied", "Banner", (art) => { console.log(art) });
+        //return;
+
+        console.log(response);
+        slackApi.avisarProximoFila(response.FaceMatches[0].Face.ExternalImageId);
+      }
     }
-    
-    console.log(response);
-  } 
-  catch(ex) {
-    console.log(ex);
+    catch (ex) {
+      console.log(ex);
+    }
   }
 };
 run();

@@ -3,3 +3,4 @@ photos/*
 !photos/.gitkeep
 config/index.js
 test_picture.png
+slack_api/banco_testes.js
